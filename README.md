@@ -32,3 +32,15 @@ A strong peak remains near 5 Hz, while the noise raises the overall spectrum bas
 ### Output
 See assets/frequency_spectrum.png
 
+
+## Low-Pass Filtering
+
+### Objective
+Reduce broadband noise while preserving the 5 Hz sine wave.
+
+### Method
+Applied a frequency-domain low-pass filter (cutoff = 10 Hz) by masking FFT bins and using inverse FFT.
+
+### Output
+See assets/filtered_signal.png
+
