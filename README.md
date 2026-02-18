@@ -44,3 +44,15 @@ Applied a frequency-domain low-pass filter (cutoff = 10 Hz) by masking FFT bins 
 ### Output
 See assets/filtered_signal.png
 
+
+## CLI Tool: signal_tool.py
+
+### Simulate + add noise + FFT + filter (saves plots to assets/)
+python .\src\signal_tool.py --freq 5 --fs 1000 --duration 1 --noise-std 0.8 --filter gaussian --cutoff 10
+
+### Load CSV (single column), filter, save filtered CSV
+python .\src\signal_tool.py --input your_data.csv --fs 1000 --filter hard --cutoff 10 --save-filtered filtered.csv
+
+### Load WAV, filter, save filtered WAV
+python .\src\signal_tool.py --input your_audio.wav --filter gaussian --cutoff 2000 --save-filtered filtered.wav
+
