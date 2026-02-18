@@ -1,6 +1,7 @@
 {
-  "timestamp": "2026-02-18T19:20:52.191493Z",
+  "timestamp": "2026-02-18T20:15:03.982181Z",
   "args": {
+    "version": false,
     "input": null,
     "fs": 1000,
     "duration": 1.0,
@@ -21,7 +22,7 @@
     "snr_filtered_db": 7.2639494496262795
   },
   "outputs": {
-    "time_plot": "assets\\time_domain.png",
-    "fft_plot": "assets\\frequency_domain.png"
+    "time_plot": "assets/time_domain.png",
+    "fft_plot": "assets/frequency_domain.png"
   }
 }

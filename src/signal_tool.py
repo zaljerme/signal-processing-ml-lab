@@ -6,6 +6,9 @@ from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Version (must be ABOVE main so --version works)
+__version__ = "0.1.0"
+
 
 def ensure_dir(path: str) -> None:
     if path and not os.path.exists(path):
@@ -99,23 +102,47 @@ def main():
         description="Signal processing tool: load or simulate signals, add noise, FFT, low-pass filter, save outputs."
     )
 
-    p.add_argument("--input", type=str, default=None, help="Path to input file (.csv or .wav). If omitted, simulates a sine wave.")
-    p.add_argument("--fs", type=int, default=1000, help="Sampling rate (Hz). Used for simulation or CSV data.")
-    p.add_argument("--duration", type=float, default=1.0, help="Duration (s) for simulation.")
-    p.add_argument("--freq", type=float, default=5.0, help="Sine frequency (Hz) for simulation.")
+    # Professional nicety
+    p.add_argument("--version", action="store_true", help="Print version and exit.")
 
-    p.add_argument("--noise-std", type=float, default=0.0, help="Gaussian noise std to add (0 = none).")
-    p.add_argument("--seed", type=int, default=0, help="Random seed for reproducibility (use -1 for no seeding).")
+    # Input / simulation
+    p.add_argument("--input", type=str, default=None,
+                   help="Path to input file (.csv or .wav). If omitted, simulates a sine wave.")
+    p.add_argument("--fs", type=int, default=1000,
+                   help="Sampling rate (Hz). Used for simulation or CSV data.")
+    p.add_argument("--duration", type=float, default=1.0,
+                   help="Duration (s) for simulation.")
+    p.add_argument("--freq", type=float, default=5.0,
+                   help="Sine frequency (Hz) for simulation.")
 
-    p.add_argument("--filter", choices=["none", "hard", "gaussian"], default="none", help="Low-pass filter type in frequency domain.")
-    p.add_argument("--cutoff", type=float, default=10.0, help="Low-pass cutoff frequency (Hz).")
+    # Noise
+    p.add_argument("--noise-std", type=float, default=0.0,
+                   help="Gaussian noise std to add (0 = none).")
+    p.add_argument("--seed", type=int, default=0,
+                   help="Random seed for reproducibility (use -1 for no seeding).")
 
-    p.add_argument("--outdir", type=str, default="assets", help="Directory to save plots.")
-    p.add_argument("--save-filtered", type=str, default=None, help="Save filtered signal to this path (.csv or .wav).")
-    p.add_argument("--no-plots", action="store_true", help="Disable plotting/saving plots.")
-    p.add_argument("--report", type=str, default=None, help="Save a JSON report to this path (e.g., assets/report.json).")
+    # Filtering
+    p.add_argument("--filter", choices=["none", "hard", "gaussian"], default="none",
+                   help="Low-pass filter type in frequency domain.")
+    p.add_argument("--cutoff", type=float, default=10.0,
+                   help="Low-pass cutoff frequency (Hz).")
+
+    # Outputs
+    p.add_argument("--outdir", type=str, default="assets",
+                   help="Directory to save plots.")
+    p.add_argument("--save-filtered", type=str, default=None,
+                   help="Save filtered signal to this path (.csv or .wav).")
+    p.add_argument("--no-plots", action="store_true",
+                   help="Disable plotting/saving plots.")
+    p.add_argument("--report", type=str, default=None,
+                   help="Save a JSON report to this path (e.g., assets/report.json).")
 
     args = p.parse_args()
+
+    # Version exit
+    if args.version:
+        print(__version__)
+        return
 
     seed = None if args.seed == -1 else args.seed
     ensure_dir(args.outdir)
@@ -132,6 +159,7 @@ def main():
     clean = None
     fs = args.fs
 
+    # Load or simulate
     if args.input is None:
         clean = generate_sine(args.duration, fs, args.freq)
         x = clean.copy()
@@ -150,16 +178,19 @@ def main():
     report["fs_hz"] = fs
     report["n_samples"] = int(len(x))
 
+    # Noise
     if args.noise_std > 0.0:
         x_noisy = add_gaussian_noise(x, args.noise_std, seed)
     else:
         x_noisy = x
 
+    # Filter
     if args.filter == "none":
         x_filtered = x_noisy
     else:
         x_filtered = lowpass_fft(x_noisy, fs, args.cutoff, mode=args.filter)
 
+    # Metrics (SNR only if we have clean ground truth)
     if clean is not None and args.noise_std > 0.0:
         report["metrics"]["snr_noisy_db"] = float(snr_db(clean, x_noisy))
         print(f"SNR before filtering (noisy): {report['metrics']['snr_noisy_db']:.2f} dB")
@@ -168,6 +199,7 @@ def main():
         report["metrics"]["snr_filtered_db"] = float(snr_db(clean, x_filtered))
         print(f"SNR after filtering ({args.filter}): {report['metrics']['snr_filtered_db']:.2f} dB")
 
+    # Save filtered output
     if args.save_filtered is not None:
         out_ext = os.path.splitext(args.save_filtered)[1].lower()
         ensure_dir(os.path.dirname(args.save_filtered) or ".")
@@ -180,8 +212,8 @@ def main():
         report["outputs"]["filtered_path"] = args.save_filtered
         print(f"Saved filtered output -> {args.save_filtered}")
 
+    # Plots
     if not args.no_plots:
-        # Time plot
         plt.figure(figsize=(12, 6))
         plt.plot(x_noisy, alpha=0.35, label="input/noisy")
         if args.filter != "none":
@@ -196,10 +228,9 @@ def main():
         time_path = os.path.join(args.outdir, "time_domain.png")
         plt.savefig(time_path, dpi=200)
         plt.close()
-        report["outputs"]["time_plot"] = time_path
+        report["outputs"]["time_plot"] = time_path.replace("\\", "/")
         print(f"Saved plot -> {time_path}")
 
-        # Frequency plot
         f1, mag1 = compute_fft(x_noisy, fs)
         plt.figure(figsize=(12, 6))
         plt.plot(f1, mag1, label="input/noisy FFT")
@@ -215,9 +246,10 @@ def main():
         fft_path = os.path.join(args.outdir, "frequency_domain.png")
         plt.savefig(fft_path, dpi=200)
         plt.close()
-        report["outputs"]["fft_plot"] = fft_path
+        report["outputs"]["fft_plot"] = fft_path.replace("\\", "/")
         print(f"Saved plot -> {fft_path}")
 
+    # Report
     if args.report is not None:
         ensure_dir(os.path.dirname(args.report) or ".")
         with open(args.report, "w", encoding="utf-8") as f:
