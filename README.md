@@ -20,3 +20,15 @@ SNR decreases as noise increases:
 ### Output
 See assets/noise_comparison.png
 
+
+## Frequency Domain (FFT)
+
+### Objective
+Visualize how Gaussian noise affects the frequency spectrum of the sine wave.
+
+### What to look for
+A strong peak remains near 5 Hz, while the noise raises the overall spectrum baseline as noise increases.
+
+### Output
+See assets/frequency_spectrum.png
+
