@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-02-18T22:08:40.117405Z",
+  "version": "0.3.0",
+  "args": {
+    "version": false,
+    "input": null,
+    "fs": 1000,
+    "duration": 1.0,
+    "freq": 8.0,
+    "noise_std": 0.6,
+    "seed": 0,
+    "filter": "gaussian",
+    "cutoff": 12.0,
+    "outdir": "assets",
+    "batch_save_filtered": false,
+    "report": "assets/test.json"
+  },
+  "results": [
+    {
+      "input": "simulated",
+      "fs_hz": 1000,
+      "n_samples": 1000,
+      "features": {
+        "rms": 0.2971283863033727,
+        "mean": -0.02715402449411722,
+        "std": 0.29588500621190517,
+        "peak_frequency_hz": 8.0,
+        "spectral_centroid_hz": 6.161454069039622
+      }
+    }
+  ]
+}
