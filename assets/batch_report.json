@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-02-18T20:30:48.572757Z",
+  "version": "0.2.0",
+  "args": {
+    "version": false,
+    "input": ".\\data_folder",
+    "fs": 1000,
+    "duration": 1.0,
+    "freq": 5.0,
+    "noise_std": 0.2,
+    "seed": 0,
+    "filter": "gaussian",
+    "cutoff": 15.0,
+    "outdir": "assets",
+    "batch_save_filtered": true,
+    "no_plots": false,
+    "report": "assets/batch_report.json"
+  },
+  "mode": "batch",
+  "results": [
+    {
+      "input": "./data_folder/mix.csv",
+      "fs_hz": 1000,
+      "n_samples": 1000,
+      "outputs": {
+        "filtered_csv": "assets/mix/mix_filtered.csv",
+        "time_plot": "assets/mix/time_domain.png",
+        "fft_plot": "assets/mix/frequency_domain.png"
+      }
+    },
+    {
+      "input": "./data_folder/sine5.csv",
+      "fs_hz": 1000,
+      "n_samples": 1000,
+      "outputs": {
+        "filtered_csv": "assets/sine5/sine5_filtered.csv",
+        "time_plot": "assets/sine5/time_domain.png",
+        "fft_plot": "assets/sine5/frequency_domain.png"
+      }
+    }
+  ]
+}

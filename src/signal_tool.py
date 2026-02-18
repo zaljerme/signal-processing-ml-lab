@@ -6,13 +6,26 @@ from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Version (must be ABOVE main so --version works)
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 def ensure_dir(path: str) -> None:
     if path and not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
+
+
+def is_supported_file(path: str) -> bool:
+    ext = os.path.splitext(path)[1].lower()
+    return ext in [".csv", ".wav"]
+
+
+def list_supported_files(folder: str):
+    files = []
+    for name in os.listdir(folder):
+        p = os.path.join(folder, name)
+        if os.path.isfile(p) and is_supported_file(p):
+            files.append(p)
+    return sorted(files)
 
 
 def load_csv(path: str) -> np.ndarray:
@@ -90,10 +103,82 @@ def lowpass_fft(x: np.ndarray, fs: int, cutoff_hz: float, mode: str = "hard") ->
     return np.fft.ifft(Y).real
 
 
-def snr_db(clean: np.ndarray, test: np.ndarray) -> float:
-    signal_power = np.mean(clean ** 2)
-    noise_power = np.mean((test - clean) ** 2)
-    return 10.0 * np.log10(signal_power / noise_power)
+def process_one(input_path: str, fs_default: int, noise_std: float, seed, filt: str, cutoff: float,
+                outdir: str, save_filtered: bool, no_plots: bool):
+    ext = os.path.splitext(input_path)[1].lower()
+    fs = fs_default
+
+    if ext == ".csv":
+        x = load_csv(input_path)
+        label = os.path.basename(input_path)
+    elif ext == ".wav":
+        x, fs = load_wav_mono(input_path)
+        label = os.path.basename(input_path)
+    else:
+        raise ValueError("Unsupported input. Use .csv or .wav.")
+
+    if noise_std > 0.0:
+        x_noisy = add_gaussian_noise(x, noise_std, seed)
+    else:
+        x_noisy = x
+
+    if filt == "none":
+        x_filtered = x_noisy
+    else:
+        x_filtered = lowpass_fft(x_noisy, fs, cutoff, mode=filt)
+
+    outputs = {}
+
+    base = os.path.splitext(os.path.basename(input_path))[0]
+    file_outdir = os.path.join(outdir, base)
+    ensure_dir(file_outdir)
+
+    if save_filtered:
+        csv_out = os.path.join(file_outdir, f"{base}_filtered.csv")
+        np.savetxt(csv_out, x_filtered, delimiter=",")
+        outputs["filtered_csv"] = csv_out.replace("\\", "/")
+
+    if not no_plots:
+        # time plot
+        plt.figure(figsize=(12, 6))
+        plt.plot(x_noisy, alpha=0.35, label="input/noisy")
+        if filt != "none":
+            plt.plot(x_filtered, linewidth=2, label=f"filtered ({filt}, cutoff={cutoff}Hz)")
+        plt.title(f"Time Domain ({label})")
+        plt.xlabel("Sample")
+        plt.ylabel("Amplitude")
+        plt.legend()
+        plt.tight_layout()
+        tpath = os.path.join(file_outdir, "time_domain.png")
+        plt.savefig(tpath, dpi=200)
+        plt.close()
+        outputs["time_plot"] = tpath.replace("\\", "/")
+
+        # fft plot
+        f1, mag1 = compute_fft(x_noisy, fs)
+        plt.figure(figsize=(12, 6))
+        plt.plot(f1, mag1, label="input/noisy FFT")
+        if filt != "none":
+            f2, mag2 = compute_fft(x_filtered, fs)
+            plt.plot(f2, mag2, label="filtered FFT")
+        plt.xlim(0, min(200, fs / 2))
+        plt.title(f"Frequency Domain (FFT) ({label})")
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Magnitude")
+        plt.legend()
+        plt.tight_layout()
+        fpath = os.path.join(file_outdir, "frequency_domain.png")
+        plt.savefig(fpath, dpi=200)
+        plt.close()
+        outputs["fft_plot"] = fpath.replace("\\", "/")
+
+    result = {
+        "input": input_path.replace("\\", "/"),
+        "fs_hz": fs,
+        "n_samples": int(len(x)),
+        "outputs": outputs
+    }
+    return result
 
 
 def main():
@@ -101,45 +186,29 @@ def main():
         prog="signal_tool",
         description="Signal processing tool: load or simulate signals, add noise, FFT, low-pass filter, save outputs."
     )
-
-    # Professional nicety
     p.add_argument("--version", action="store_true", help="Print version and exit.")
 
-    # Input / simulation
     p.add_argument("--input", type=str, default=None,
-                   help="Path to input file (.csv or .wav). If omitted, simulates a sine wave.")
-    p.add_argument("--fs", type=int, default=1000,
-                   help="Sampling rate (Hz). Used for simulation or CSV data.")
-    p.add_argument("--duration", type=float, default=1.0,
-                   help="Duration (s) for simulation.")
-    p.add_argument("--freq", type=float, default=5.0,
-                   help="Sine frequency (Hz) for simulation.")
+                   help="Path to input file (.csv or .wav) OR a folder containing .csv/.wav files. If omitted, simulates a sine wave.")
+    p.add_argument("--fs", type=int, default=1000, help="Sampling rate (Hz). Used for simulation or CSV data.")
+    p.add_argument("--duration", type=float, default=1.0, help="Duration (s) for simulation.")
+    p.add_argument("--freq", type=float, default=5.0, help="Sine frequency (Hz) for simulation.")
 
-    # Noise
-    p.add_argument("--noise-std", type=float, default=0.0,
-                   help="Gaussian noise std to add (0 = none).")
-    p.add_argument("--seed", type=int, default=0,
-                   help="Random seed for reproducibility (use -1 for no seeding).")
+    p.add_argument("--noise-std", type=float, default=0.0, help="Gaussian noise std to add (0 = none).")
+    p.add_argument("--seed", type=int, default=0, help="Random seed for reproducibility (use -1 for no seeding).")
 
-    # Filtering
     p.add_argument("--filter", choices=["none", "hard", "gaussian"], default="none",
                    help="Low-pass filter type in frequency domain.")
-    p.add_argument("--cutoff", type=float, default=10.0,
-                   help="Low-pass cutoff frequency (Hz).")
+    p.add_argument("--cutoff", type=float, default=10.0, help="Low-pass cutoff frequency (Hz).")
 
-    # Outputs
-    p.add_argument("--outdir", type=str, default="assets",
-                   help="Directory to save plots.")
-    p.add_argument("--save-filtered", type=str, default=None,
-                   help="Save filtered signal to this path (.csv or .wav).")
-    p.add_argument("--no-plots", action="store_true",
-                   help="Disable plotting/saving plots.")
-    p.add_argument("--report", type=str, default=None,
-                   help="Save a JSON report to this path (e.g., assets/report.json).")
+    p.add_argument("--outdir", type=str, default="assets", help="Directory to save outputs.")
+    p.add_argument("--batch-save-filtered", action="store_true",
+                   help="(Batch mode) Save filtered CSV for each file.")
+    p.add_argument("--no-plots", action="store_true", help="Disable plotting/saving plots.")
+    p.add_argument("--report", type=str, default=None, help="Save a JSON report to this path.")
 
     args = p.parse_args()
 
-    # Version exit
     if args.version:
         print(__version__)
         return
@@ -149,107 +218,107 @@ def main():
 
     report = {
         "timestamp": datetime.utcnow().isoformat() + "Z",
+        "version": __version__,
         "args": vars(args),
-        "fs_hz": None,
-        "n_samples": None,
-        "metrics": {},
-        "outputs": {}
+        "mode": None,
+        "results": []
     }
 
-    clean = None
-    fs = args.fs
-
-    # Load or simulate
+    # Mode selection
     if args.input is None:
-        clean = generate_sine(args.duration, fs, args.freq)
-        x = clean.copy()
-        source_label = f"simulated_sine_{args.freq}Hz"
-    else:
-        ext = os.path.splitext(args.input)[1].lower()
-        if ext == ".csv":
-            x = load_csv(args.input)
-            source_label = os.path.basename(args.input)
-        elif ext == ".wav":
-            x, fs = load_wav_mono(args.input)
-            source_label = os.path.basename(args.input)
+        # single simulate mode (no batch)
+        x = generate_sine(args.duration, args.fs, args.freq)
+        if args.noise_std > 0.0:
+            x_noisy = add_gaussian_noise(x, args.noise_std, seed)
         else:
-            raise ValueError("Unsupported input. Use .csv or .wav.")
+            x_noisy = x
 
-    report["fs_hz"] = fs
-    report["n_samples"] = int(len(x))
-
-    # Noise
-    if args.noise_std > 0.0:
-        x_noisy = add_gaussian_noise(x, args.noise_std, seed)
-    else:
-        x_noisy = x
-
-    # Filter
-    if args.filter == "none":
-        x_filtered = x_noisy
-    else:
-        x_filtered = lowpass_fft(x_noisy, fs, args.cutoff, mode=args.filter)
-
-    # Metrics (SNR only if we have clean ground truth)
-    if clean is not None and args.noise_std > 0.0:
-        report["metrics"]["snr_noisy_db"] = float(snr_db(clean, x_noisy))
-        print(f"SNR before filtering (noisy): {report['metrics']['snr_noisy_db']:.2f} dB")
-
-    if clean is not None and args.filter != "none":
-        report["metrics"]["snr_filtered_db"] = float(snr_db(clean, x_filtered))
-        print(f"SNR after filtering ({args.filter}): {report['metrics']['snr_filtered_db']:.2f} dB")
-
-    # Save filtered output
-    if args.save_filtered is not None:
-        out_ext = os.path.splitext(args.save_filtered)[1].lower()
-        ensure_dir(os.path.dirname(args.save_filtered) or ".")
-        if out_ext == ".csv":
-            np.savetxt(args.save_filtered, x_filtered, delimiter=",")
-        elif out_ext == ".wav":
-            save_wav_mono(args.save_filtered, x_filtered, fs)
+        if args.filter == "none":
+            x_filtered = x_noisy
         else:
-            raise ValueError("save-filtered must end with .csv or .wav")
-        report["outputs"]["filtered_path"] = args.save_filtered
-        print(f"Saved filtered output -> {args.save_filtered}")
+            x_filtered = lowpass_fft(x_noisy, args.fs, args.cutoff, mode=args.filter)
 
-    # Plots
-    if not args.no_plots:
-        plt.figure(figsize=(12, 6))
-        plt.plot(x_noisy, alpha=0.35, label="input/noisy")
-        if args.filter != "none":
-            plt.plot(x_filtered, linewidth=2, label=f"filtered ({args.filter}, cutoff={args.cutoff}Hz)")
-        if clean is not None:
-            plt.plot(clean, linestyle="--", label="clean (ground truth)")
-        plt.title(f"Time Domain ({source_label})")
-        plt.xlabel("Sample")
-        plt.ylabel("Amplitude")
-        plt.legend()
-        plt.tight_layout()
-        time_path = os.path.join(args.outdir, "time_domain.png")
-        plt.savefig(time_path, dpi=200)
-        plt.close()
-        report["outputs"]["time_plot"] = time_path.replace("\\", "/")
-        print(f"Saved plot -> {time_path}")
+        # save plots at root outdir
+        if not args.no_plots:
+            plt.figure(figsize=(12, 6))
+            plt.plot(x_noisy, alpha=0.35, label="input/noisy")
+            if args.filter != "none":
+                plt.plot(x_filtered, linewidth=2, label=f"filtered ({args.filter}, cutoff={args.cutoff}Hz)")
+            plt.plot(x, linestyle="--", label="clean (ground truth)")
+            plt.title("Time Domain (simulated)")
+            plt.xlabel("Sample")
+            plt.ylabel("Amplitude")
+            plt.legend()
+            plt.tight_layout()
+            tpath = os.path.join(args.outdir, "time_domain.png")
+            plt.savefig(tpath, dpi=200)
+            plt.close()
 
-        f1, mag1 = compute_fft(x_noisy, fs)
-        plt.figure(figsize=(12, 6))
-        plt.plot(f1, mag1, label="input/noisy FFT")
-        if args.filter != "none":
-            f2, mag2 = compute_fft(x_filtered, fs)
-            plt.plot(f2, mag2, label="filtered FFT")
-        plt.xlim(0, min(200, fs / 2))
-        plt.title(f"Frequency Domain (FFT) ({source_label})")
-        plt.xlabel("Frequency (Hz)")
-        plt.ylabel("Magnitude")
-        plt.legend()
-        plt.tight_layout()
-        fft_path = os.path.join(args.outdir, "frequency_domain.png")
-        plt.savefig(fft_path, dpi=200)
-        plt.close()
-        report["outputs"]["fft_plot"] = fft_path.replace("\\", "/")
-        print(f"Saved plot -> {fft_path}")
+            f1, mag1 = compute_fft(x_noisy, args.fs)
+            plt.figure(figsize=(12, 6))
+            plt.plot(f1, mag1, label="input/noisy FFT")
+            if args.filter != "none":
+                f2, mag2 = compute_fft(x_filtered, args.fs)
+                plt.plot(f2, mag2, label="filtered FFT")
+            plt.xlim(0, min(200, args.fs / 2))
+            plt.title("Frequency Domain (FFT) (simulated)")
+            plt.xlabel("Frequency (Hz)")
+            plt.ylabel("Magnitude")
+            plt.legend()
+            plt.tight_layout()
+            fpath = os.path.join(args.outdir, "frequency_domain.png")
+            plt.savefig(fpath, dpi=200)
+            plt.close()
 
-    # Report
+        report["mode"] = "simulate"
+        report["results"].append({
+            "input": "simulated",
+            "fs_hz": args.fs,
+            "n_samples": int(len(x)),
+            "outputs": {
+                "time_plot": os.path.join(args.outdir, "time_domain.png").replace("\\", "/") if not args.no_plots else None,
+                "fft_plot": os.path.join(args.outdir, "frequency_domain.png").replace("\\", "/") if not args.no_plots else None
+            }
+        })
+    else:
+        # file or folder mode
+        if os.path.isdir(args.input):
+            report["mode"] = "batch"
+            files = list_supported_files(args.input)
+            if len(files) == 0:
+                raise ValueError("No .csv or .wav files found in the folder.")
+
+            for fp in files:
+                res = process_one(
+                    input_path=fp,
+                    fs_default=args.fs,
+                    noise_std=args.noise_std,
+                    seed=seed,
+                    filt=args.filter,
+                    cutoff=args.cutoff,
+                    outdir=args.outdir,
+                    save_filtered=args.batch_save_filtered,
+                    no_plots=args.no_plots
+                )
+                report["results"].append(res)
+                print(f"Processed: {os.path.basename(fp)}")
+        else:
+            report["mode"] = "single_file"
+            if not is_supported_file(args.input):
+                raise ValueError("Unsupported input. Use .csv or .wav.")
+            res = process_one(
+                input_path=args.input,
+                fs_default=args.fs,
+                noise_std=args.noise_std,
+                seed=seed,
+                filt=args.filter,
+                cutoff=args.cutoff,
+                outdir=args.outdir,
+                save_filtered=False,
+                no_plots=args.no_plots
+            )
+            report["results"].append(res)
+
     if args.report is not None:
         ensure_dir(os.path.dirname(args.report) or ".")
         with open(args.report, "w", encoding="utf-8") as f:
