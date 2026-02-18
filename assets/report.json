@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-02-18T19:20:52.191493Z",
+  "args": {
+    "input": null,
+    "fs": 1000,
+    "duration": 1.0,
+    "freq": 5.0,
+    "noise_std": 0.8,
+    "seed": 0,
+    "filter": "gaussian",
+    "cutoff": 10.0,
+    "outdir": "assets",
+    "save_filtered": null,
+    "no_plots": false,
+    "report": "assets/report.json"
+  },
+  "fs_hz": 1000,
+  "n_samples": 1000,
+  "metrics": {
+    "snr_noisy_db": -0.9678553023879835,
+    "snr_filtered_db": 7.2639494496262795
+  },
+  "outputs": {
+    "time_plot": "assets\\time_domain.png",
+    "fft_plot": "assets\\frequency_domain.png"
+  }
+}

@@ -56,3 +56,7 @@ python .\src\signal_tool.py --input your_data.csv --fs 1000 --filter hard --cuto
 ### Load WAV, filter, save filtered WAV
 python .\src\signal_tool.py --input your_audio.wav --filter gaussian --cutoff 2000 --save-filtered filtered.wav
 
+
+### Example with JSON report
+python -m src --freq 5 --fs 1000 --duration 1 --noise-std 0.8 --filter gaussian --cutoff 10 --report assets/report.json
+
